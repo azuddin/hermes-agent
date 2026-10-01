@@ -395,7 +395,8 @@ async def add_credential_pool_entry(body: CredentialPoolAdd, profile: Optional[s
                 priority=0,
                 source=SOURCE_MANUAL,
                 access_token=api_key,
-            ))
+            ),
+                borrowed_scope=__import__("hermes_cli.auth", fromlist=["_global_auth_file_path"])._global_auth_file_path() is not None)
             # Re-adding is an explicit re-engagement signal: lift every suppression
             # for this provider so a source deleted earlier can seed again
             # (mirrors `hermes auth add`).

@@ -215,7 +215,8 @@ def pkce_auth_handler(cfg: OAuthPKCEConfig) -> Callable[[str, Any], bool]:
             entry = load_pool(provider).add_entry(PooledCredential(
                 provider=provider, id=uuid.uuid4().hex[:6], label=cfg.label or provider,
                 auth_type=AUTH_TYPE_OAUTH, priority=0, source=POOL_SOURCE, **tokens,
-                extra={"oauth_pkce": {"client_id": cfg.client_id, "scope": " ".join(cfg.scopes)}}))
+                extra={"oauth_pkce": {"client_id": cfg.client_id, "scope": " ".join(cfg.scopes)}}),
+                borrowed_scope=auth_mod._global_auth_file_path() is not None)
             print(f"Signed in to {cfg.label or provider}; credential {entry.id} added to the pool.")
             return True
         if action == "status":

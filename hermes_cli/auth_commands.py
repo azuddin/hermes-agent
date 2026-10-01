@@ -370,7 +370,7 @@ def _add_api_key_credential(args, provider: str, pool) -> PooledCredential:
     entry = PooledCredential(
         provider=provider, id=uuid.uuid4().hex[:6], label=label, auth_type=AUTH_TYPE_API_KEY,
         priority=0, source=SOURCE_MANUAL, access_token=token, base_url=_provider_base_url(provider))
-    entry = pool.add_entry(entry)
+    entry = pool.add_entry(entry, borrowed_scope=auth_mod._global_auth_file_path() is not None)
     print(f'Added {provider} credential #{len(pool.entries())}: "{label}"')
     return entry
 
@@ -433,7 +433,7 @@ def _add_credential(args, provider: str, pool, requested_type: str) -> PooledCre
         source=spec.source(creds) if callable(spec.source) else spec.source,
         access_token=token, **spec.fields(creds, provider))
     existing = pool.entries()
-    entry = pool.add_entry(entry)
+    entry = pool.add_entry(entry, borrowed_scope=auth_mod._global_auth_file_path() is not None)
     # The first Codex/xAI credential becomes the active provider (as the old singleton save path
     # did implicitly); subsequent adds leave the active provider as-is.
     if spec.activate_first and not existing:

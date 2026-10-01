@@ -107,21 +107,42 @@ class CredentialPoolAdminMixin:
                 return None, None, f"No credential #{index}."
             return None, None, f'No credential matching "{raw}".'
 
-    def add_entry(self, entry: PooledCredential) -> PooledCredential:
+    def add_entry(self, entry: PooledCredential, *, borrowed_scope: bool = True) -> PooledCredential:
+        """Append *entry* and persist it.
+
+        ``borrowed_scope`` describes what ``_borrowed_root_ids`` means for this
+        call. ``hermes -p <profile> auth add <single-use provider>`` sets it
+        when the pool was loaded in a NAMED profile: the profile is claiming
+        its OWN credential and the borrowed rows must be left out of the
+        profile's store — copying the borrowed root grant alongside would fork
+        its single-use refresh token (#100339).
+
+        The root/classic pool loader passes ``False``. There is no profile to
+        claim the row, so the id set is a bookkeeping artifact and filtering it
+        out would persist an EMPTY pool while ``_add_credential`` has already
+        printed the success line — the credential is silently discarded and
+        ``active_provider`` is left naming a provider with no grant (#130501).
+        """
         from agent.credential_pool import _next_priority, write_credential_pool
         from hermes_cli import auth as auth_mod
 
         with self._lock:
             entry = replace(entry, priority=_next_priority(self._entries))
             self._entries.append(entry)
-            borrowed_ids = getattr(self, "_borrowed_root_ids", None)
-            if borrowed_ids:
-                # ``hermes -p <profile> auth add <single-use provider>``: the
-                # profile claims its OWN credential. Persist only profile-owned
-                # rows — copying the borrowed root grant alongside would fork
-                # its single-use refresh token (#100339). Once the profile owns
-                # rows, the root fallback for this provider is shadowed.
-                self._entries = [e for e in self._entries if e.id not in borrowed_ids]
+            borrowed_ids = getattr(self, "_borrowed_root_ids", None) or set()
+            if borrowed_scope:
+                # ``hermes -p <profile> auth add <single-use provider>``: this
+                # profile is claiming its OWN credential, so it must be written
+                # to the PROFILE's store. Never through ``persist_pool_entries``
+                # — that routes a single-use-refresh provider to the root
+                # store's UPDATE-ONLY merge, which drops any row the root does
+                # not already have and silently discards a fresh login while
+                # ``_add_credential`` has already printed the success line.
+                # Borrowed root rows stay out of the profile's store: copying
+                # the borrowed grant alongside would fork its single-use
+                # refresh token (#100339).
+                if borrowed_ids:
+                    self._entries = [e for e in self._entries if e.id not in borrowed_ids]
                 written = write_credential_pool(
                     self.provider, [e.to_dict() for e in self._entries],
                     token_bases=self._persisted_token_pairs,
